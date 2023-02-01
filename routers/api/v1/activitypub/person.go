@@ -12,7 +12,6 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/context"
-	"code.gitea.io/gitea/modules/forgefed"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/routers/api/v1/utils"
 	"code.gitea.io/gitea/services/activitypub"
@@ -188,45 +187,17 @@ func PersonFollowing(ctx *context.APIContext) {
 	//   "200":
 	//     "$ref": "#/responses/ActivityPub"
 
-	iri := ctx.ContextUser.GetIRI()
-
-	// TODO: pagination is really broken
-	// https://codeberg.org/forgejo/forgejo/commit/90afd4f3294c1f33d9b5afe5c6f082e2831026cb
-	users, count, err := user_model.GetUserFollowing(ctx, ctx.ContextUser, ctx.Doer, utils.GetListOptions(ctx))
+	listOptions := utils.GetListOptions(ctx)
+	users, count, err := user_model.GetUserFollowing(ctx, ctx.ContextUser, ctx.Doer, listOptions)
 	if err != nil {
 		ctx.ServerError("GetUserFollowing", err)
 		return
 	}
-
-	page := ctx.FormInt("page")
-
-	followingCollection := ap.OrderedCollectionNew(ap.IRI(iri + "/following"))
-	followingCollection.First = ap.IRI(iri + "/following?page=1")
-	followingCollection.TotalItems = uint(count)
-	if page == 0 {
-		response(ctx, followingCollection)
-		return
-	}
-
-	followingPage := ap.OrderedCollectionPageNew(followingCollection)
-	followingPage.ID = ap.IRI(fmt.Sprintf("%s/following?page=%d", iri, page))
-
-	if page > 1 {
-		followingPage.Prev = ap.IRI(fmt.Sprintf("%s/following?page=%d", iri, page-1))
-	}
-	if len(users)*page < int(count) {
-		followingPage.Next = ap.IRI(fmt.Sprintf("%s/following?page=%d", iri, page+1))
-	}
-
+	items := make([]string, 0)
 	for _, user := range users {
-		err := followingPage.OrderedItems.Append(ap.IRI(user.GetIRI()))
-		if err != nil {
-			ctx.ServerError("OrderedItems.Append", err)
-			return
-		}
+		items = append(items, user.GetIRI())
 	}
-
-	response(ctx, followingPage)
+	responseCollection(ctx, ctx.ContextUser.GetIRI()+"/following", listOptions, items, count)
 }
 
 // PersonFollowers function returns the user's Followers Collection
@@ -246,27 +217,17 @@ func PersonFollowers(ctx *context.APIContext) {
 	//   "200":
 	//     "$ref": "#/responses/ActivityPub"
 
-	iri := ctx.ContextUser.GetIRI()
-
-	users, _, err := user_model.GetUserFollowers(ctx, ctx.ContextUser, ctx.Doer, utils.GetListOptions(ctx))
+	listOptions := utils.GetListOptions(ctx)
+	users, count, err := user_model.GetUserFollowers(ctx, ctx.ContextUser, ctx.Doer, listOptions)
 	if err != nil {
 		ctx.ServerError("GetUserFollowers", err)
 		return
 	}
-
-	followers := ap.OrderedCollectionNew(ap.IRI(iri + "/followers"))
-	followers.TotalItems = uint(len(users))
-
+	items := make([]string, 0)
 	for _, user := range users {
-		person := ap.PersonNew(ap.IRI(user.GetIRI()))
-		err := followers.OrderedItems.Append(person)
-		if err != nil {
-			ctx.ServerError("OrderedItems.Append", err)
-			return
-		}
+		items = append(items, user.GetIRI())
 	}
-
-	response(ctx, followers)
+	responseCollection(ctx, ctx.ContextUser.GetIRI()+"/followers", listOptions, items, count)
 }
 
 // PersonLiked function returns the user's Liked Collection
@@ -286,9 +247,9 @@ func PersonLiked(ctx *context.APIContext) {
 	//   "200":
 	//     "$ref": "#/responses/ActivityPub"
 
-	iri := ctx.ContextUser.GetIRI()
-
+	listOptions := utils.GetListOptions(ctx)
 	repos, count, err := repo_model.SearchRepository(ctx, &repo_model.SearchRepoOptions{
+		ListOptions: listOptions,
 		Actor:       ctx.Doer,
 		Private:     ctx.IsSigned,
 		StarredByID: ctx.ContextUser.ID,
@@ -297,18 +258,9 @@ func PersonLiked(ctx *context.APIContext) {
 		ctx.ServerError("GetUserStarred", err)
 		return
 	}
-
-	liked := ap.OrderedCollectionNew(ap.IRI(iri + "/liked"))
-	liked.TotalItems = uint(count)
-
+	items := make([]string, 0)
 	for _, repo := range repos {
-		repo := forgefed.RepositoryNew(ap.IRI(repo.GetIRI()))
-		err := liked.OrderedItems.Append(repo)
-		if err != nil {
-			ctx.ServerError("OrderedItems.Append", err)
-			return
-		}
+		items = append(items, repo.GetIRI())
 	}
-
-	response(ctx, liked)
+	responseCollection(ctx, ctx.ContextUser.GetIRI()+"/liked", listOptions, items, count)
 }
