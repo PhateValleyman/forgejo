@@ -41,7 +41,7 @@ func responseCollection(ctx *context.APIContext, iri string, listOptions db.List
 			ctx.ServerError("Append", err)
 		}
 	}
-	
+
 	response(ctx, page)
 }
 
