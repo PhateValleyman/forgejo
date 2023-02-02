@@ -685,7 +685,7 @@ func GetRepositoryByIRI(ctx context.Context, iri string) (*Repository, error) {
 	repo := &Repository{
 		OriginalURL: iri,
 	}
-	has, err := db.GetEngine(db.DefaultContext).Get(repo)
+	has, err := db.GetEngine(ctx).Get(repo)
 	if err != nil {
 		return nil, err
 	} else if !has {
